@@ -34,6 +34,7 @@ class Wkhtmltopdf
     protected $_userStyleSheet = null; // path to user style sheet file
     protected $_enableSmartShrinking = false; // boolean for smart shrinking, defaults to false
     protected $_options = array();
+    protected $_lastRenderStatus = array();
 
     /**
      * Path to executable.
@@ -794,6 +795,16 @@ class Wkhtmltopdf
     }
 
     /**
+     * Get status information about the last performed render
+     *
+     * @return array
+     * @author pataquets
+     */
+    public function getLastRenderStatus() {
+        return $this->_lastRenderStatus;
+    }
+
+    /**
      * Returns command to execute.
      *
      * @author aur1mas <aur1mas@devnet.lt>
@@ -846,6 +857,9 @@ class Wkhtmltopdf
      */
     protected function _render()
     {
+        $this->_lastRenderStatus = array();
+        $this->_lastRenderStatus['startTime'] = microtime(TRUE);
+
         if (mb_strlen($this->_html, 'utf-8') === 0 && empty($this->_url)) {
             throw new Exception("HTML content or source URL not set");
         }
@@ -857,13 +871,23 @@ class Wkhtmltopdf
             $input = $this->getFilePath();
         }
 
-        $content = $this->_exec(str_replace('%input%', $input, $this->_getCommand()));
+        $command = str_replace('%input%', $input, $this->_getCommand());
+        $content = $this->_exec($command);
+
+        $this->_lastRenderStatus['endTime'] = microtime(TRUE);
+
+        // Copy all the _exec() return array to lastRenderStatus, but unset
+        // the 'output' key to save memory.
+        $this->_lastRenderStatus['content'] = $content;
+        unset($this->_lastRenderStatus['content']['stdout']);
 
         if (strpos(mb_strtolower($content['stderr']), 'error')) {
             throw new Exception("System error <pre>" . $content['stderr'] . "</pre>");
         }
 
-        if (mb_strlen($content['stdout'], 'utf-8') === 0) {
+        $bytes = mb_strlen($content['stdout'], 'utf-8');
+        $this->_lastRenderStatus['bytes'] = $bytes;
+        if ($bytes === 0) {
             throw new Exception("WKHTMLTOPDF didn't return any data");
         }
 
